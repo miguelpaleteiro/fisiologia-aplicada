@@ -41,22 +41,39 @@ export function clearInitialAssessmentDraft() {
   localStorage.removeItem("fisiologia-aplicada:initial-assessment");
 }
 
+export async function getAssessmentByEmail(email: string) {
+  return (await parseJson(await fetchApi(`/assessments?email=${encodeURIComponent(email.toLowerCase())}`))) as InitialAssessment;
+}
+
 export async function register(name: string, email: string, password: string) {
   const normalizedEmail = email.toLowerCase();
-  const draft = getInitialAssessmentDraft();
+  const localDraft = getInitialAssessmentDraft();
+  let assessment = localDraft?.email.toLowerCase() === normalizedEmail ? localDraft : undefined;
+
+  if (!assessment) {
+    try {
+      assessment = await getAssessmentByEmail(normalizedEmail);
+    } catch {
+      assessment = undefined;
+    }
+  }
+
   const payload = {
     name,
     email: normalizedEmail,
     password,
-    assessment: draft?.email.toLowerCase() === normalizedEmail ? draft : undefined,
+    assessment,
   };
+
   const profile = await parseJson(await fetchApi("/auth/register", {
     method: "POST",
     body: JSON.stringify(payload),
   }));
-  if (draft?.email.toLowerCase() === normalizedEmail) {
+
+  if (localDraft?.email.toLowerCase() === normalizedEmail) {
     clearInitialAssessmentDraft();
   }
+
   return profile as MemberProfile;
 }
 

@@ -77,8 +77,8 @@ export default function CTA() {
 
             {submitted ? (
               <div className="mt-7 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-5">
-                <h3 className="font-semibold text-emerald-200">Borrador guardado en este dispositivo</h3>
-                <p className="mt-2 text-sm leading-6 text-emerald-50/80">Crea tu cuenta para enviar la solicitud al creador. Se adjuntará esta valoración para su revisión.</p>
+                <h3 className="font-semibold text-emerald-200">Valoración guardada en el servidor</h3>
+                <p className="mt-2 text-sm leading-6 text-emerald-50/80">Tu solicitud ya está disponible para el creador. Crea tu cuenta con el mismo correo o inicia sesión si ya la tienes.</p>
                 <div className="mt-5 flex flex-wrap gap-3">
                   <Link href="/registro" className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-sky-100">Crear mi cuenta</Link>
                   <button type="button" onClick={closeDialog} className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">Cerrar</button>
@@ -92,7 +92,7 @@ export default function CTA() {
                 <label className="text-sm font-medium text-slate-300">Experiencia entrenando<select required value={form.experience} onChange={(event) => updateField("experience", event.target.value)} className={fieldClass}><option value="" disabled>Selecciona una opción</option><option>Principiante</option><option>Intermedio</option><option>Avanzado</option></select></label>
                 <label className="text-sm font-medium text-slate-300">Días disponibles por semana<input required type="number" min="1" max="7" value={form.availability} onChange={(event) => updateField("availability", event.target.value)} className={fieldClass} placeholder="Por ejemplo, 4" /></label>
                 <label className="text-sm font-medium text-slate-300 sm:col-span-2">Lesiones, limitaciones o información relevante<textarea value={form.limitations} onChange={(event) => updateField("limitations", event.target.value)} className={`${fieldClass} min-h-28 resize-y`} placeholder="Opcional" /></label>
-                <p className="text-xs leading-5 text-slate-500 sm:col-span-2">La valoración se guarda en este navegador y se adjunta cuando crees tu cuenta con este mismo correo.</p>
+                <p className="text-xs leading-5 text-slate-500 sm:col-span-2">La valoración se guarda en el servidor y se podrá adjuntar cuando crees tu cuenta con este mismo correo.</p>
                 <button type="submit" className="rounded-xl bg-gradient-to-r from-sky-500 to-cyan-400 px-5 py-3 font-bold text-white transition hover:scale-[1.01] sm:col-span-2">Guardar mi valoración</button>
               </form>
             )}
