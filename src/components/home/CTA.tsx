@@ -33,9 +33,9 @@ export default function CTA() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function submitAssessment(event: FormEvent<HTMLFormElement>) {
+  async function submitAssessment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    saveInitialAssessmentDraft({ ...form, submittedAt: new Date().toISOString() });
+    await saveInitialAssessmentDraft({ ...form, submittedAt: new Date().toISOString() });
     setSubmitted(true);
   }
 

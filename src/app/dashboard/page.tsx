@@ -3,16 +3,13 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { Exercise, Measurement, MemberProfile, ProgramStatus } from "@/lib/types";
 import ExerciseLibrary from "@/components/dashboard/ExerciseLibrary";
 import {
-  Exercise,
   getExercises,
   getMembers,
   getSession,
   logout,
-  Measurement,
-  MemberProfile,
-  ProgramStatus,
   saveExercises,
   saveMeasurement,
   saveMemberGoals,
@@ -73,28 +70,47 @@ export default function DashboardPage() {
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    const refresh = () => {
-      const current = getSession();
+    let active = true;
 
-      if (!current) {
+    async function refresh() {
+      try {
+        const current = await getSession();
+
+        if (!active) return;
+        if (!current) {
+          router.replace("/login");
+          return;
+        }
+
+        setProfile(current);
+        setForm(newMeasurement(current));
+        setGoalForm({ goalWeight: current.stats.goalWeight, goalDescription: current.stats.goalDescription });
+
+        if (current.role === "creator") {
+          setMembers(await getMembers());
+        } else {
+          setMembers([]);
+        }
+
+        setExercises(await getExercises());
+      } catch {
+        if (!active) return;
+        setProfile(null);
         router.replace("/login");
-        return;
       }
+    }
 
-      setProfile(current);
-      setMembers(getMembers());
-      setExercises(getExercises());
-      setForm(newMeasurement(current));
-      setGoalForm({ goalWeight: current.stats.goalWeight, goalDescription: current.stats.goalDescription });
+    refresh();
+
+    const handleStorage = () => {
+      if (!active) return;
+      refresh();
     };
-
-    const frame = window.requestAnimationFrame(refresh);
-    const handleStorage = () => refresh();
 
     window.addEventListener("storage", handleStorage);
 
     return () => {
-      window.cancelAnimationFrame(frame);
+      active = false;
       window.removeEventListener("storage", handleStorage);
     };
   }, [router]);
@@ -117,7 +133,7 @@ export default function DashboardPage() {
     setNotice("");
   }
 
-  function submitMeasurement(event: FormEvent<HTMLFormElement>) {
+  async function submitMeasurement(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!profile) return;
@@ -127,13 +143,17 @@ export default function DashboardPage() {
       return;
     }
 
-    const next = saveMeasurement(profile, form);
-    setProfile(next);
-    setForm(newMeasurement(next));
-    setNotice("Registro guardado. Tu evolución ya está actualizada.");
+    try {
+      const next = await saveMeasurement(profile, form);
+      setProfile(next);
+      setForm(newMeasurement(next));
+      setNotice("Registro guardado. Tu evolución ya está actualizada.");
+    } catch {
+      setNotice("No se pudo guardar el registro. Inténtalo de nuevo.");
+    }
   }
 
-  function saveGoals(event: FormEvent<HTMLFormElement>) {
+  async function saveGoals(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!profile) return;
 
@@ -142,22 +162,28 @@ export default function DashboardPage() {
       return;
     }
 
-    const next = saveMemberGoals(profile.id, {
-      goalWeight: goalForm.goalWeight,
-      goalDescription: goalForm.goalDescription.trim() || "Mejorar composición corporal",
-    });
+    try {
+      const next = await saveMemberGoals(profile.id, {
+        goalWeight: goalForm.goalWeight,
+        goalDescription: goalForm.goalDescription.trim() || "Mejorar composición corporal",
+      });
 
-    if (!next) {
+      if (!next) {
+        setNotice("No se pudo guardar el objetivo. Inténtalo de nuevo.");
+        return;
+      }
+
+      setProfile(next);
+      if (isCreator) {
+        setMembers(await getMembers());
+      }
+      setNotice("Objetivo actualizado correctamente.");
+    } catch {
       setNotice("No se pudo guardar el objetivo. Inténtalo de nuevo.");
-      return;
     }
-
-    setProfile(next);
-    setMembers(getMembers());
-    setNotice("Objetivo actualizado correctamente.");
   }
 
-  function addExercise(event: FormEvent<HTMLFormElement>) {
+  async function addExercise(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const name = String(data.get("name") || "").trim();
@@ -179,69 +205,103 @@ export default function DashboardPage() {
       },
     ];
 
-    saveExercises(next);
-    setExercises(next);
-    event.currentTarget.reset();
-    setNotice(`${name} se ha añadido al plan activo.`);
+    try {
+      const saved = await saveExercises(next);
+      setExercises(saved);
+      event.currentTarget.reset();
+      setNotice(`${name} se ha añadido al plan activo.`);
+    } catch {
+      setNotice("No se pudo guardar el ejercicio. Inténtalo de nuevo.");
+    }
   }
 
-  function updateExerciseFields(updated: Exercise) {
-    const next = updateExercise(updated);
-    setExercises(next);
-    setNotice(`Ejercicio "${updated.name}" actualizado.`);
+  async function updateExerciseFields(updated: Exercise) {
+    try {
+      const next = await updateExercise(updated);
+      setExercises((current) => current.map((exercise) => (exercise.id === next.id ? next : exercise)));
+      setNotice(`Ejercicio "${updated.name}" actualizado.`);
+    } catch {
+      setNotice("No se pudo actualizar el ejercicio. Inténtalo de nuevo.");
+    }
   }
 
-  function deleteExercise(exerciseId: string) {
-    const next = removeExercise(exerciseId);
-    setExercises(next);
-    setNotice("Ejercicio eliminado del plan.");
+  async function deleteExercise(exerciseId: string) {
+    try {
+      const next = await removeExercise(exerciseId);
+      setExercises(next);
+      setNotice("Ejercicio eliminado del plan.");
+    } catch {
+      setNotice("No se pudo eliminar el ejercicio. Inténtalo de nuevo.");
+    }
   }
 
-  function toggleExerciseActive(exerciseId: string) {
+  async function toggleExerciseActive(exerciseId: string) {
     const target = exercises.find((exercise) => exercise.id === exerciseId);
     if (!target) return;
     const updated = { ...target, active: !target.active };
-    updateExerciseFields(updated);
+    await updateExerciseFields(updated);
   }
 
-  function saveClientGoals(memberId: string, goals: { goalWeight: number; goalDescription: string }) {
+  async function saveClientGoals(memberId: string, goals: { goalWeight: number; goalDescription: string }) {
     if (!Number.isFinite(goals.goalWeight) || goals.goalWeight <= 0) {
       setNotice("Define un objetivo de peso válido para el cliente.");
       return;
     }
 
-    const updated = saveMemberGoals(memberId, { ...goals, goalDescription: goals.goalDescription.trim() || "Mejorar composición corporal" });
-    if (!updated) {
-      setNotice("No se pudo actualizar el objetivo del cliente.");
-      return;
-    }
+    try {
+      const updated = await saveMemberGoals(memberId, {
+        ...goals,
+        goalDescription: goals.goalDescription.trim() || "Mejorar composición corporal",
+      });
 
-    setMembers(getMembers());
-    setNotice(`Objetivos de ${updated.name} guardados.`);
+      if (!updated) {
+        setNotice("No se pudo actualizar el objetivo del cliente.");
+        return;
+      }
+
+      if (isCreator) {
+        setMembers(await getMembers());
+      }
+      setNotice(`Objetivos de ${updated.name} guardados.`);
+    } catch {
+      setNotice("No se pudo actualizar el objetivo del cliente.");
+    }
   }
 
-  function completeWorkout(routine: string) {
+  async function completeWorkout(routine: string) {
     if (!profile) return;
     const date = new Date().toISOString().slice(0, 10);
     const current = profile.measurements.find((measurement) => measurement.date === date) ?? { ...newMeasurement(profile), date };
     const measurement = { ...current, weeklyWorkouts: Math.min(14, current.weeklyWorkouts + 1) };
-    const next = saveMeasurement(profile, measurement);
-    setProfile(next);
-    setForm(newMeasurement(next));
-    setNotice(`${routine} marcada como realizada. Se ha actualizado el total semanal.`);
+
+    try {
+      const next = await saveMeasurement(profile, measurement);
+      setProfile(next);
+      setForm(newMeasurement(next));
+      setNotice(`${routine} marcada como realizada. Se ha actualizado el total semanal.`);
+    } catch {
+      setNotice("No se pudo actualizar el entrenamiento. Inténtalo de nuevo.");
+    }
   }
 
-  function closeSession() {
-    logout();
+  async function closeSession() {
+    await logout();
     router.push("/login");
   }
 
-  function changeProgramStatus(memberId: string, status: ProgramStatus) {
-    const updated = updateProgramStatus(memberId, status);
-    if (!updated) return;
-    setMembers(getMembers());
-    setNotice(`${updated.name} ahora figura como ${status === "active" ? "aceptado" : status === "rejected" ? "no aceptado" : "pendiente"}.`);
+  async function changeProgramStatus(memberId: string, status: ProgramStatus) {
+    try {
+      const updated = await updateProgramStatus(memberId, status);
+      if (!updated) return;
+      if (isCreator) {
+        setMembers(await getMembers());
+      }
+      setNotice(`${updated.name} ahora figura como ${status === "active" ? "aceptado" : status === "rejected" ? "no aceptado" : "pendiente"}.`);
+    } catch {
+      setNotice("No se pudo cambiar el estado del programa. Inténtalo de nuevo.");
+    }
   }
+
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">

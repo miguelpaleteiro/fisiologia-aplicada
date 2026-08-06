@@ -1,60 +1,136 @@
-export type Measurement = { id: string; date: string; weight: number; bodyFat: number; leanMass: number; waist: number; weeklySteps: number; weeklyWorkouts: number; adherence: number; recovery: number; sleepHours: number; performance: number; notes?: string };
-export type PhysicalStats = Omit<Measurement, "id" | "date" | "notes"> & { goalWeight: number; goalDescription: string; updatedAt: string };
-export type Exercise = { id: string; name: string; category: string; sets: number; reps: string; active: boolean };
-export type ProgramStatus = "pending" | "active" | "rejected";
-export type InitialAssessment = { name: string; email: string; goal: string; experience: string; availability: string; limitations: string; submittedAt?: string };
-export type MemberProfile = { id: string; name: string; email: string; password: string; role: "member" | "creator"; programStatus: ProgramStatus; assessment?: InitialAssessment; stats: PhysicalStats; measurements: Measurement[] };
-const accountsKey = "fisiologia-aplicada:accounts"; const sessionKey = "fisiologia-aplicada:session"; const exercisesKey = "fisiologia-aplicada:exercises"; const assessmentDraftKey = "fisiologia-aplicada:initial-assessment";
-const today = () => new Date().toISOString().slice(0, 10);
-const defaults: PhysicalStats = { weight: 78.5, goalWeight: 74, goalDescription: "Mejorar composición corporal", bodyFat: 18.5, leanMass: 63.4, waist: 82, weeklySteps: 8000, weeklyWorkouts: 4, adherence: 92, recovery: 85, sleepHours: 8, performance: 12, updatedAt: new Date().toISOString() };
-const starterExercises: Exercise[] = [
-  { id: "press", name: "Press de banca", category: "Upper A", sets: 4, reps: "6–8", active: true },
-  { id: "row", name: "Remo con barra", category: "Upper A", sets: 4, reps: "6–8", active: true },
-  { id: "upper-a-incline", name: "Press inclinado con mancuernas", category: "Upper A", sets: 3, reps: "8–10", active: true },
-  { id: "upper-a-pulldown", name: "Jalón al pecho", category: "Upper A", sets: 3, reps: "8–12", active: true },
-  { id: "upper-a-lateral", name: "Elevaciones laterales", category: "Upper A", sets: 3, reps: "12–15", active: true },
-  { id: "squat", name: "Sentadilla", category: "Lower A", sets: 4, reps: "5–8", active: true },
-  { id: "lower-a-rdl", name: "Peso muerto rumano", category: "Lower A", sets: 3, reps: "8–10", active: true },
-  { id: "lower-a-press", name: "Prensa de piernas", category: "Lower A", sets: 3, reps: "10–12", active: true },
-  { id: "lower-a-curl", name: "Curl femoral", category: "Lower A", sets: 3, reps: "10–12", active: true },
-  { id: "upper-b-ohp", name: "Press militar", category: "Upper B", sets: 3, reps: "6–8", active: true },
-  { id: "upper-b-pullup", name: "Dominadas o jalón neutro", category: "Upper B", sets: 4, reps: "6–10", active: true },
-  { id: "upper-b-chest", name: "Aperturas en polea", category: "Upper B", sets: 3, reps: "10–15", active: true },
-  { id: "upper-b-curl", name: "Curl de bíceps", category: "Upper B", sets: 3, reps: "10–12", active: true },
-  { id: "lower-b-hip-thrust", name: "Hip thrust", category: "Lower B", sets: 4, reps: "8–10", active: true },
-  { id: "lower-b-lunge", name: "Zancadas búlgaras", category: "Lower B", sets: 3, reps: "8–10", active: true },
-  { id: "lower-b-extension", name: "Extensión de cuádriceps", category: "Lower B", sets: 3, reps: "12–15", active: true },
-  { id: "lower-b-calf", name: "Elevación de gemelos", category: "Lower B", sets: 4, reps: "10–15", active: true },
-];
-type StoredProfile = Partial<MemberProfile> & { stats?: Partial<PhysicalStats>; measurements?: Array<Partial<Measurement>> };
-function migrate(value: StoredProfile): MemberProfile {
-  const stats: PhysicalStats = {
-    ...defaults,
-    ...value.stats,
-    goalDescription: value.stats?.goalDescription ?? value.assessment?.goal ?? defaults.goalDescription,
-    updatedAt: value.stats?.updatedAt || defaults.updatedAt,
-  };
-  const legacy: Measurement = { id: "initial", date: stats.updatedAt.slice(0, 10) || today(), weight: stats.weight, bodyFat: stats.bodyFat, leanMass: stats.leanMass, waist: stats.waist, weeklySteps: stats.weeklySteps, weeklyWorkouts: stats.weeklyWorkouts, adherence: stats.adherence, recovery: stats.recovery, sleepHours: stats.sleepHours, performance: stats.performance };
-  const measurements = value.measurements?.length ? value.measurements.map((measurement) => ({ ...legacy, ...measurement, weeklySteps: measurement.weeklySteps ?? stats.weeklySteps, weeklyWorkouts: measurement.weeklyWorkouts ?? stats.weeklyWorkouts, adherence: measurement.adherence ?? stats.adherence, recovery: measurement.recovery ?? stats.recovery, sleepHours: measurement.sleepHours ?? stats.sleepHours, performance: measurement.performance ?? stats.performance, id: measurement.id || crypto.randomUUID() })) : [legacy];
-  const role = value.role || "member";
-  return { id: value.id || crypto.randomUUID(), name: value.name || "Usuario", email: value.email || "", password: value.password || "", role, programStatus: value.programStatus || (role === "creator" ? "active" : "pending"), assessment: value.assessment, stats, measurements };
+import type { Exercise, InitialAssessment, Measurement, MemberProfile, PhysicalStats, ProgramStatus } from "@/lib/types";
+
+const apiBase = "/api";
+
+async function parseJson(response: Response) {
+  const result = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(result?.message || "Error en el servidor");
+  }
+  return result;
 }
-const read = (): MemberProfile[] => { try { return (JSON.parse(localStorage.getItem(accountsKey) || "[]") as MemberProfile[]).map(migrate); } catch { return []; } };
-const write = (profiles: MemberProfile[]) => localStorage.setItem(accountsKey, JSON.stringify(profiles));
-export function ensureCreatorAccount() { const accounts = read(); if (accounts.some((account) => account.role === "creator")) return; write([...accounts, { id: crypto.randomUUID(), name: "Miguel", email: "miguel@fisiologiaaplicada.app", password: "FisioAdmin2026!", role: "creator", programStatus: "active", stats: defaults, measurements: [] }]); }
-export function getInitialAssessmentDraft(): InitialAssessment | null { try { return JSON.parse(localStorage.getItem(assessmentDraftKey) || "null") as InitialAssessment | null; } catch { return null; } }
-export function saveInitialAssessmentDraft(assessment: InitialAssessment) { localStorage.setItem(assessmentDraftKey, JSON.stringify(assessment)); }
-export function clearInitialAssessmentDraft() { localStorage.removeItem(assessmentDraftKey); }
-export function register(name: string, email: string, password: string) { const accounts = read(); const normalizedEmail = email.toLowerCase(); if (accounts.some((account) => account.email === normalizedEmail)) throw new Error("Ya existe una cuenta con este correo."); const draft = getInitialAssessmentDraft(); const assessment = draft?.email.toLowerCase() === normalizedEmail ? { ...draft, name } : undefined; const goalDescription = assessment?.goal ?? defaults.goalDescription; const first: Measurement = { id: crypto.randomUUID(), date: today(), weight: defaults.weight, bodyFat: defaults.bodyFat, leanMass: defaults.leanMass, waist: defaults.waist, weeklySteps: defaults.weeklySteps, weeklyWorkouts: defaults.weeklyWorkouts, adherence: defaults.adherence, recovery: defaults.recovery, sleepHours: defaults.sleepHours, performance: defaults.performance }; const profile: MemberProfile = { id: crypto.randomUUID(), name, email: normalizedEmail, password, role: "member", programStatus: "pending", assessment, stats: { ...defaults, goalDescription }, measurements: [first] }; write([...accounts, profile]); if (assessment) clearInitialAssessmentDraft(); localStorage.setItem(sessionKey, profile.id); return profile; }
-export function login(email: string, password: string) { ensureCreatorAccount(); const profile = read().find((account) => account.email === email.toLowerCase() && account.password === password); if (!profile) throw new Error("El correo o la contraseña no coinciden."); localStorage.setItem(sessionKey, profile.id); return profile; }
-export const getSession = () => read().find((account) => account.id === localStorage.getItem(sessionKey)) || null;
-export const getMembers = () => read().filter((account) => account.role === "member");
-export const logout = () => localStorage.removeItem(sessionKey);
-export function saveProfile(profile: MemberProfile) { write(read().map((account) => account.id === profile.id ? profile : account)); }
-export function updateProgramStatus(memberId: string, programStatus: ProgramStatus) { const accounts = read(); const member = accounts.find((account) => account.id === memberId && account.role === "member"); if (!member) return null; const next = { ...member, programStatus }; write(accounts.map((account) => account.id === memberId ? next : account)); return next; }
-export function saveMemberGoals(memberId: string, goals: Partial<Pick<PhysicalStats, "goalWeight" | "goalDescription">>) { const accounts = read(); const member = accounts.find((account) => account.id === memberId); if (!member) return null; const next: MemberProfile = { ...member, stats: { ...member.stats, ...goals, updatedAt: new Date().toISOString() } }; write(accounts.map((account) => account.id === memberId ? next : account)); return next; }
-export function saveMeasurement(profile: MemberProfile, measurement: Measurement) { const entries = [...profile.measurements.filter((entry) => entry.date !== measurement.date), measurement].sort((a, b) => a.date.localeCompare(b.date)); const next: MemberProfile = { ...profile, measurements: entries, stats: { ...profile.stats, weight: measurement.weight, bodyFat: measurement.bodyFat, leanMass: measurement.leanMass, waist: measurement.waist, weeklySteps: measurement.weeklySteps, weeklyWorkouts: measurement.weeklyWorkouts, adherence: measurement.adherence, recovery: measurement.recovery, sleepHours: measurement.sleepHours, performance: measurement.performance, updatedAt: `${measurement.date}T12:00:00` } }; saveProfile(next); return next; }
-export function getExercises(): Exercise[] { try { const existing = JSON.parse(localStorage.getItem(exercisesKey) || "[]") as Exercise[]; return existing.length ? [...existing, ...starterExercises.filter((starter) => !existing.some((exercise) => exercise.id === starter.id))] : starterExercises; } catch { return starterExercises; } }
-export const saveExercises = (exercises: Exercise[]) => localStorage.setItem(exercisesKey, JSON.stringify(exercises));
-export function updateExercise(updated: Exercise) { const next = getExercises().map((exercise) => exercise.id === updated.id ? updated : exercise); saveExercises(next); return next; }
-export function removeExercise(exerciseId: string) { const next = getExercises().filter((exercise) => exercise.id !== exerciseId); saveExercises(next); return next; }
+
+function fetchApi(path: string, options: RequestInit = {}) {
+  return fetch(`${apiBase}${path}`, {
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+}
+
+export function getInitialAssessmentDraft(): InitialAssessment | null {
+  try {
+    return JSON.parse(localStorage.getItem("fisiologia-aplicada:initial-assessment") || "null") as InitialAssessment | null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveInitialAssessmentDraft(assessment: InitialAssessment) {
+  localStorage.setItem("fisiologia-aplicada:initial-assessment", JSON.stringify(assessment));
+  await parseJson(await fetchApi("/assessments", {
+    method: "POST",
+    body: JSON.stringify(assessment),
+  }));
+}
+
+export function clearInitialAssessmentDraft() {
+  localStorage.removeItem("fisiologia-aplicada:initial-assessment");
+}
+
+export async function register(name: string, email: string, password: string) {
+  const normalizedEmail = email.toLowerCase();
+  const draft = getInitialAssessmentDraft();
+  const payload = {
+    name,
+    email: normalizedEmail,
+    password,
+    assessment: draft?.email.toLowerCase() === normalizedEmail ? draft : undefined,
+  };
+  const profile = await parseJson(await fetchApi("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }));
+  if (draft?.email.toLowerCase() === normalizedEmail) {
+    clearInitialAssessmentDraft();
+  }
+  return profile as MemberProfile;
+}
+
+export async function login(email: string, password: string) {
+  const profile = await parseJson(await fetchApi("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  }));
+  return profile as MemberProfile;
+}
+
+export async function getSession() {
+  try {
+    const profile = await parseJson(await fetchApi("/auth/session"));
+    return profile as MemberProfile;
+  } catch {
+    return null;
+  }
+}
+
+export async function getMembers() {
+  return (await parseJson(await fetchApi("/members"))) as MemberProfile[];
+}
+
+export async function logout() {
+  await parseJson(await fetchApi("/auth/logout", { method: "POST" }));
+}
+
+export async function saveProfile(profile: MemberProfile) {
+  return profile;
+}
+
+export async function updateProgramStatus(memberId: string, programStatus: ProgramStatus) {
+  return (await parseJson(await fetchApi(`/members/${memberId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ programStatus }),
+  }))) as MemberProfile;
+}
+
+export async function saveMemberGoals(memberId: string, goals: Partial<Pick<PhysicalStats, "goalWeight" | "goalDescription">>) {
+  return (await parseJson(await fetchApi(`/members/${memberId}`, {
+    method: "PATCH",
+    body: JSON.stringify(goals),
+  }))) as MemberProfile;
+}
+
+export async function saveMeasurement(profile: MemberProfile, measurement: Measurement) {
+  return (await parseJson(await fetchApi("/measurements", {
+    method: "POST",
+    body: JSON.stringify(measurement),
+  }))) as MemberProfile;
+}
+
+export async function getExercises() {
+  return (await parseJson(await fetchApi("/exercises"))) as Exercise[];
+}
+
+export async function saveExercises(exercises: Exercise[]) {
+  return (await parseJson(await fetchApi("/exercises", {
+    method: "PUT",
+    body: JSON.stringify(exercises),
+  }))) as Exercise[];
+}
+
+export async function updateExercise(updated: Exercise) {
+  return (await parseJson(await fetchApi("/exercises", {
+    method: "PATCH",
+    body: JSON.stringify(updated),
+  }))) as Exercise;
+}
+
+export async function removeExercise(exerciseId: string) {
+  return (await parseJson(await fetchApi("/exercises", {
+    method: "DELETE",
+    body: JSON.stringify({ id: exerciseId }),
+  }))) as Exercise[];
+}
