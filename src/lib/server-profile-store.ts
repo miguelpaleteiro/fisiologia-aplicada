@@ -1,10 +1,10 @@
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import crypto from "node:crypto";
 import type { Exercise, InitialAssessment, MemberProfile, Measurement, PhysicalStats, ProgramStatus } from "@/lib/types";
 
-const storeDir = join(process.cwd(), "data");
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.FUNCTIONS_WORKER_RUNTIME);
+const storeDir = isServerless ? join("/tmp", "data") : join(process.cwd(), "data");
 const storePath = join(storeDir, "db.json");
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -115,12 +115,6 @@ async function readDatabase(): Promise<Database> {
 
 async function writeDatabase(database: Database) {
   await writeFile(storePath, JSON.stringify(database, null, 2), "utf8");
-}
-
-function findLatestMeasurement(profile: MemberProfile): Measurement {
-  return profile.measurements.length
-    ? profile.measurements[profile.measurements.length - 1]
-    : createMeasurement({ date: profile.stats.updatedAt.slice(0, 10) });
 }
 
 export async function authenticateSession(token?: string) {
