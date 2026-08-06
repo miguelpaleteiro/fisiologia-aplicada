@@ -64,6 +64,13 @@ export default function Navbar() {
 
         <div className="flex items-center gap-4">
 
+          <a
+            href="#servicios"
+            className="inline-flex rounded-xl border border-slate-700 px-4 py-3 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-white sm:hidden"
+          >
+            Explorar
+          </a>
+
           <Link
             href="/login"
             className="hidden sm:inline-flex rounded-xl border border-slate-700 px-5 py-3 font-medium text-slate-300 transition-all duration-300 hover:border-sky-500 hover:text-white"

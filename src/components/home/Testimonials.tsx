@@ -31,8 +31,8 @@ export default function Testimonials() {
             </h3>
 
             <p className="text-slate-400 leading-8">
-              "Aprendí por qué hacía cada cosa. No seguía una dieta,
-              entendía cómo funcionaba mi cuerpo."
+              &ldquo;Aprendí por qué hacía cada cosa. No seguía una dieta,
+              entendía cómo funcionaba mi cuerpo.&rdquo;
             </p>
 
           </div>
@@ -46,8 +46,8 @@ export default function Testimonials() {
             </h3>
 
             <p className="text-slate-400 leading-8">
-              "Nunca había tenido un seguimiento tan personalizado.
-              Todo tenía una explicación."
+              &ldquo;Nunca había tenido un seguimiento tan personalizado.
+              Todo tenía una explicación.&rdquo;
             </p>
 
           </div>
@@ -61,8 +61,8 @@ export default function Testimonials() {
             </h3>
 
             <p className="text-slate-400 leading-8">
-              "Ahora sé interpretar mi progreso y ya no dependo de los
-              mitos que veía en redes."
+              &ldquo;Ahora sé interpretar mi progreso y ya no dependo de los
+              mitos que veía en redes.&rdquo;
             </p>
 
           </div>

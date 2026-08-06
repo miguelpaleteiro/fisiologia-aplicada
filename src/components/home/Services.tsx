@@ -18,7 +18,7 @@ export default function Services() {
 
           <p className="max-w-3xl mx-auto text-slate-400 text-lg md:text-xl leading-9">
             No seguimos modas. Cada decisión está basada en evidencia
-            científica para optimizar tu entrenamiento, nutrición y
+            científica para optimizar tu npm install framer-motionentrenamiento, nutrición y
             recuperación.
           </p>
 

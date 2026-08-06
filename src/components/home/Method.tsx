@@ -1,6 +1,6 @@
 export default function Method() {
   return (
-    <section className="p-8">
+    <section id="metodo" className="p-8">
       <h2 className="text-3xl font-bold mb-6 text-center">
         Cómo funciona el método
       </h2>

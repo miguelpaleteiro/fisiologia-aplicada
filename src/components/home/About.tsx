@@ -1,6 +1,6 @@
 export default function About() {
   return (
-    <section className="p-8">
+    <section id="sobre-mi" className="p-8">
 
       <h2 className="text-3xl font-bold mb-4">
         Ciencia aplicada al rendimiento
@@ -18,6 +18,8 @@ export default function About() {
 
       <a
         href="https://instagram.com/miguelpaleteiro"
+        target="_blank"
+        rel="noopener noreferrer"
         className="font-bold"
       >
         @miguelpaleteiro

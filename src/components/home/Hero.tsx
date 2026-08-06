@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Hero() {
   return (
     <section className="relative min-h-screen bg-slate-950 text-white flex items-center px-8 pt-24">
@@ -30,17 +32,20 @@ export default function Hero() {
 
             <div className="mt-10 flex flex-wrap gap-4">
 
-              <a
+              <Link
                 href="/login"
                 className="rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 px-8 py-4 text-lg font-semibold transition-all duration-300 hover:scale-105 hover:shadow-[0_20px_60px_rgba(14,165,233,0.35)]"
               >
                 Empieza ahora
-              </a>
+              </Link>
 
 
-              <button className="rounded-2xl border border-slate-700 px-8 py-4 text-lg transition hover:border-sky-500 hover:bg-slate-900">
+              <a
+                href="#metodo"
+                className="rounded-2xl border border-slate-700 px-8 py-4 text-lg transition hover:border-sky-500 hover:bg-slate-900"
+              >
                 Ver demo
-              </button>
+              </a>
 
             </div>
 

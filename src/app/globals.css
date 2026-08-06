@@ -104,20 +104,75 @@ body::after {
 }
 
 
-/* Scrollbar */
+/* Oculta la barra lateral sin desactivar el desplazamiento. */
+html {
+  scrollbar-width: none;
+}
+
 ::-webkit-scrollbar {
-  width: 10px;
+  display: none;
 }
 
-::-webkit-scrollbar-track {
-  background: #020617;
+/* Iconos de movimiento de la biblioteca de ejercicios */
+.exercise-motion {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: exercise-isolation 1.8s ease-in-out infinite;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #0ea5e9;
-  border-radius: 999px;
+.exercise-press {
+  animation-name: exercise-press;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #38bdf8;
+.exercise-pull {
+  animation-name: exercise-pull;
+}
+
+.exercise-squat,
+.exercise-lunge {
+  animation-name: exercise-squat;
+}
+
+.exercise-hinge {
+  animation-name: exercise-hinge;
+}
+
+.exercise-raise {
+  animation-name: exercise-raise;
+}
+
+@keyframes exercise-press {
+  0%, 100% { transform: translateY(4px); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes exercise-pull {
+  0%, 100% { transform: translateX(4px); }
+  50% { transform: translateX(-4px); }
+}
+
+@keyframes exercise-squat {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(7px) scaleY(.88); }
+}
+
+@keyframes exercise-hinge {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(9deg); }
+}
+
+@keyframes exercise-raise {
+  0%, 100% { transform: translateY(3px); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes exercise-isolation {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exercise-motion {
+    animation: none;
+  }
 }
