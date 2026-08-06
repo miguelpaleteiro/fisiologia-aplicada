@@ -15,6 +15,9 @@ import {
   ProgramStatus,
   saveExercises,
   saveMeasurement,
+  saveMemberGoals,
+  updateExercise,
+  removeExercise,
   updateProgramStatus,
 } from "@/lib/profile-store";
 
@@ -66,10 +69,11 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<MemberProfile[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [form, setForm] = useState<Measurement>(emptyMeasurement);
+  const [goalForm, setGoalForm] = useState({ goalWeight: 0, goalDescription: "" });
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
+    const refresh = () => {
       const current = getSession();
 
       if (!current) {
@@ -81,9 +85,18 @@ export default function DashboardPage() {
       setMembers(getMembers());
       setExercises(getExercises());
       setForm(newMeasurement(current));
-    });
+      setGoalForm({ goalWeight: current.stats.goalWeight, goalDescription: current.stats.goalDescription });
+    };
 
-    return () => window.cancelAnimationFrame(frame);
+    const frame = window.requestAnimationFrame(refresh);
+    const handleStorage = () => refresh();
+
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("storage", handleStorage);
+    };
   }, [router]);
 
   if (!profile) {
@@ -120,6 +133,30 @@ export default function DashboardPage() {
     setNotice("Registro guardado. Tu evolución ya está actualizada.");
   }
 
+  function saveGoals(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!profile) return;
+
+    if (!Number.isFinite(goalForm.goalWeight) || goalForm.goalWeight <= 0) {
+      setNotice("Define un objetivo de peso válido antes de guardar.");
+      return;
+    }
+
+    const next = saveMemberGoals(profile.id, {
+      goalWeight: goalForm.goalWeight,
+      goalDescription: goalForm.goalDescription.trim() || "Mejorar composición corporal",
+    });
+
+    if (!next) {
+      setNotice("No se pudo guardar el objetivo. Inténtalo de nuevo.");
+      return;
+    }
+
+    setProfile(next);
+    setMembers(getMembers());
+    setNotice("Objetivo actualizado correctamente.");
+  }
+
   function addExercise(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -146,6 +183,41 @@ export default function DashboardPage() {
     setExercises(next);
     event.currentTarget.reset();
     setNotice(`${name} se ha añadido al plan activo.`);
+  }
+
+  function updateExerciseFields(updated: Exercise) {
+    const next = updateExercise(updated);
+    setExercises(next);
+    setNotice(`Ejercicio "${updated.name}" actualizado.`);
+  }
+
+  function deleteExercise(exerciseId: string) {
+    const next = removeExercise(exerciseId);
+    setExercises(next);
+    setNotice("Ejercicio eliminado del plan.");
+  }
+
+  function toggleExerciseActive(exerciseId: string) {
+    const target = exercises.find((exercise) => exercise.id === exerciseId);
+    if (!target) return;
+    const updated = { ...target, active: !target.active };
+    updateExerciseFields(updated);
+  }
+
+  function saveClientGoals(memberId: string, goals: { goalWeight: number; goalDescription: string }) {
+    if (!Number.isFinite(goals.goalWeight) || goals.goalWeight <= 0) {
+      setNotice("Define un objetivo de peso válido para el cliente.");
+      return;
+    }
+
+    const updated = saveMemberGoals(memberId, { ...goals, goalDescription: goals.goalDescription.trim() || "Mejorar composición corporal" });
+    if (!updated) {
+      setNotice("No se pudo actualizar el objetivo del cliente.");
+      return;
+    }
+
+    setMembers(getMembers());
+    setNotice(`Objetivos de ${updated.name} guardados.`);
   }
 
   function completeWorkout(routine: string) {
@@ -217,11 +289,11 @@ export default function DashboardPage() {
           )}
 
           {hasProgramAccess ? <>
-            {section === "progreso" && <Progress profile={profile} records={records} remaining={remaining} onAddRecord={() => goTo("registro")} />}
+            {section === "progreso" && <Progress profile={profile} records={records} remaining={remaining} goalForm={goalForm} onGoalFieldChange={(key, value) => setGoalForm({ ...goalForm, [key]: value })} onSaveGoals={saveGoals} onAddRecord={() => goTo("registro")} />}
             {section === "registro" && <MeasurementForm form={form} setForm={setForm} onSubmit={submitMeasurement} />}
             {section === "entrenamiento" && <Training exercises={exercises} onCompleteWorkout={completeWorkout} />}
             {section === "recomendaciones" && <Recommendations remaining={remaining} records={records} onAddRecord={() => goTo("registro")} />}
-            {section === "creador" && isCreator && <Creator members={members} exercises={exercises} onAddExercise={addExercise} onChangeStatus={changeProgramStatus} />}
+            {section === "creador" && isCreator && <Creator members={members} exercises={exercises} onAddExercise={addExercise} onChangeStatus={changeProgramStatus} onUpdateExercise={updateExerciseFields} onToggleExercise={toggleExerciseActive} onRemoveExercise={deleteExercise} onSaveClientGoals={saveClientGoals} />}
           </> : <ProgramAccessState profile={profile} />}
         </section>
       </div>
@@ -300,13 +372,14 @@ function DashboardNavigation({
   );
 }
 
-function Progress({ profile, records, remaining, onAddRecord }: { profile: MemberProfile; records: Measurement[]; remaining: number; onAddRecord: () => void }) {
+function Progress({ profile, records, remaining, goalForm, onGoalFieldChange, onSaveGoals, onAddRecord }: { profile: MemberProfile; records: Measurement[]; remaining: number; goalForm: { goalWeight: number; goalDescription: string }; onGoalFieldChange: (key: "goalWeight" | "goalDescription", value: string | number) => void; onSaveGoals: (event: FormEvent<HTMLFormElement>) => void; onAddRecord: () => void }) {
   return (
     <>
       <section className="relative mt-8 overflow-hidden rounded-3xl border border-violet-400/30 bg-gradient-to-br from-violet-700 via-indigo-700 to-sky-700 p-7">
         <p className="text-[10px] font-bold tracking-[.15em] text-violet-200">PLAN DE TRANSFORMACIÓN</p>
         <h2 className="mt-3 text-3xl font-bold leading-tight">Cambios que<br /><em className="font-serif font-normal">puedes medir.</em></h2>
         <p className="mt-3 max-w-sm text-sm text-violet-100">Tu evolución se calcula con tus registros fechados, no con datos de ejemplo.</p>
+        <p className="mt-3 max-w-sm text-sm text-slate-300">Objetivo actual: {profile.stats.goalDescription}</p>
         <div className="mt-5 flex flex-wrap items-end gap-4">
           <div className="rounded-xl border border-white/20 bg-white/10 p-4">
             <span className="text-[10px] text-violet-100">Meta actual</span>
@@ -317,6 +390,43 @@ function Progress({ profile, records, remaining, onAddRecord }: { profile: Membe
             Registrar hoy
           </button>
         </div>
+      </section>
+
+      <section className="mt-5 rounded-2xl border border-white/10 bg-white/[.03] p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold tracking-[.15em] text-slate-500">AJUSTA TUS OBJETIVOS</p>
+            <h2 className="mt-1 text-xl font-semibold">Objetivos personales</h2>
+          </div>
+          <span className="text-xs text-slate-400">Estos ajustes se guardan en tu perfil</span>
+        </div>
+
+        <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={onSaveGoals}>
+          <label className="grid gap-2 text-xs font-semibold text-slate-400">
+            Meta de peso
+            <input
+              className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-violet-400"
+              type="number"
+              min="1"
+              step="0.1"
+              value={goalForm.goalWeight}
+              onChange={(event) => onGoalFieldChange("goalWeight", Number(event.target.value))}
+            />
+          </label>
+          <label className="grid gap-2 text-xs font-semibold text-slate-400 sm:col-span-2">
+            Objetivo principal
+            <input
+              className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none focus:border-violet-400"
+              type="text"
+              value={goalForm.goalDescription}
+              onChange={(event) => onGoalFieldChange("goalDescription", event.target.value)}
+              placeholder="Por ejemplo: ganar fuerza, mejorar composición corporal"
+            />
+          </label>
+          <button type="submit" className="sm:col-span-2 rounded-xl bg-violet-500 py-3 text-sm font-bold transition hover:bg-violet-400">
+            Guardar objetivos
+          </button>
+        </form>
       </section>
 
       <WeeklyOverview profile={profile} records={records} />
@@ -600,7 +710,7 @@ function Recommendations({ remaining, records, onAddRecord }: { remaining: numbe
   );
 }
 
-function Creator({ members, exercises, onAddExercise, onChangeStatus }: { members: MemberProfile[]; exercises: Exercise[]; onAddExercise: (event: FormEvent<HTMLFormElement>) => void; onChangeStatus: (memberId: string, status: ProgramStatus) => void }) {
+function Creator({ members, exercises, onAddExercise, onChangeStatus, onUpdateExercise, onToggleExercise, onRemoveExercise, onSaveClientGoals }: { members: MemberProfile[]; exercises: Exercise[]; onAddExercise: (event: FormEvent<HTMLFormElement>) => void; onChangeStatus: (memberId: string, status: ProgramStatus) => void; onUpdateExercise: (exercise: Exercise) => void; onToggleExercise: (exerciseId: string) => void; onRemoveExercise: (exerciseId: string) => void; onSaveClientGoals: (memberId: string, goals: { goalWeight: number; goalDescription: string }) => void }) {
   const latestWeights = members.map((member) => member.stats.weight);
   const average = latestWeights.length ? latestWeights.reduce((sum, weight) => sum + weight, 0) / latestWeights.length : 0;
   const pendingMembers = members.filter((member) => member.programStatus === "pending");
@@ -634,6 +744,12 @@ function Creator({ members, exercises, onAddExercise, onChangeStatus }: { member
                   {member.programStatus !== "active" && <button type="button" onClick={() => onChangeStatus(member.id, "active")} className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-300">Aceptar programa</button>}
                   {member.programStatus !== "rejected" && <button type="button" onClick={() => onChangeStatus(member.id, "rejected")} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-200 transition hover:bg-rose-400/10">No aceptar</button>}
                 </div>
+                <details className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-sm">
+                  <summary className="cursor-pointer font-semibold text-slate-100">Editar objetivo y meta del cliente</summary>
+                  <div className="mt-3">
+                    <ClientGoalEditor member={member} onSave={onSaveClientGoals} />
+                  </div>
+                </details>
               </div>
             )) : <p className="text-sm text-slate-500">Crea perfiles de usuario para verlos aquí.</p>}
           </div>
@@ -650,6 +766,58 @@ function Creator({ members, exercises, onAddExercise, onChangeStatus }: { member
             <button type="submit" className="rounded-lg bg-amber-300 py-2 text-sm font-bold text-slate-950 transition hover:bg-amber-200">Añadir al plan</button>
           </form>
           <p className="mt-4 text-xs text-slate-500">{exercises.length} ejercicios configurados.</p>
+          {exercises.length > 0 && (
+            <div className="mt-5 space-y-3">
+              <h3 className="text-sm font-semibold text-white">Editar ejercicios configurados</h3>
+              {exercises.map((exercise) => (
+                <div key={exercise.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <input
+                        value={exercise.name}
+                        onChange={(event) => onUpdateExercise({ ...exercise, name: event.currentTarget.value })}
+                        className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                        aria-label="Nombre del ejercicio"
+                      />
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <input
+                          value={exercise.category}
+                          onChange={(event) => onUpdateExercise({ ...exercise, category: event.currentTarget.value })}
+                          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                          placeholder="Categoría"
+                          aria-label="Categoría"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          value={exercise.sets}
+                          onChange={(event) => onUpdateExercise({ ...exercise, sets: Number(event.currentTarget.value) })}
+                          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                          placeholder="Series"
+                          aria-label="Series"
+                        />
+                        <input
+                          value={exercise.reps}
+                          onChange={(event) => onUpdateExercise({ ...exercise, reps: event.currentTarget.value })}
+                          className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+                          placeholder="Reps"
+                          aria-label="Reps"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => onToggleExercise(exercise.id)} className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700">
+                        {exercise.active ? "Desactivar" : "Activar"}
+                      </button>
+                      <button type="button" onClick={() => onRemoveExercise(exercise.id)} className="rounded-xl border border-rose-400/30 px-3 py-2 text-xs font-semibold text-rose-200 transition hover:bg-rose-400/10">
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </article>
       </div>
     </section>
@@ -677,5 +845,44 @@ function Metric({ label, value, unit, detail, tone }: { label: string; value: st
       <strong className="mt-2 block text-2xl">{value} <small className="text-xs font-normal text-slate-500">{unit}</small></strong>
       <span className={`mt-3 block text-xs ${tone}`}>{detail}</span>
     </article>
+  );
+}
+
+function ClientGoalEditor({ member, onSave }: { member: MemberProfile; onSave: (memberId: string, goals: { goalWeight: number; goalDescription: string }) => void }) {
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        onSave(member.id, {
+          goalWeight: Number(data.get("goalWeight") || member.stats.goalWeight),
+          goalDescription: String(data.get("goalDescription") || member.stats.goalDescription),
+        });
+      }}
+      className="space-y-3"
+    >
+      <label className="grid gap-2 text-xs text-slate-400">
+        Objetivo principal
+        <input
+          name="goalDescription"
+          defaultValue={member.stats.goalDescription}
+          className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+        />
+      </label>
+      <label className="grid gap-2 text-xs text-slate-400">
+        Meta de peso
+        <input
+          name="goalWeight"
+          type="number"
+          min="1"
+          step="0.1"
+          defaultValue={member.stats.goalWeight}
+          className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-violet-400"
+        />
+      </label>
+      <button type="submit" className="rounded-xl bg-amber-300 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-200">
+        Guardar cambios del cliente
+      </button>
+    </form>
   );
 }
